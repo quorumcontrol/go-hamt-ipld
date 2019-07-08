@@ -126,7 +126,7 @@ func (n *Node) checkSize(ctx context.Context) (uint64, error) {
 		return 0, err
 	}
 
-	blk, err := n.store.Blocks.GetBlock(ctx, c)
+	blk, err := n.store.Nodes.Get(ctx, c)
 	if err != nil {
 		return 0, err
 	}

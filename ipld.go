@@ -1,6 +1,7 @@
 package hamt
 
 import (
+	"github.com/ipfs/go-ipld-format"
 	"context"
 	"math"
 	"time"
@@ -11,7 +12,6 @@ import (
 				offline "github.com/ipfs/go-ipfs/exchange/offline"
 	*/
 
-	block "github.com/ipfs/go-block-format"
 	cbor "github.com/ipfs/go-ipld-cbor"
 	recbor "github.com/polydawn/refmt/cbor"
 	atlas "github.com/polydawn/refmt/obj/atlas"
@@ -40,68 +40,33 @@ func init() {
 }
 
 type CborIpldStore struct {
-	Blocks blocks
+	Nodes nodes
 	Atlas  *atlas.Atlas
 }
 
-type blocks interface {
-	GetBlock(context.Context, cid.Cid) (block.Block, error)
-	AddBlock(block.Block) error
-}
-
-type Blockstore interface {
-	Get(cid.Cid) (block.Block, error)
-	Put(block.Block) error
-}
-
-type bswrapper struct {
-	bs Blockstore
-}
-
-func (bs *bswrapper) GetBlock(_ context.Context, c cid.Cid) (block.Block, error) {
-	return bs.bs.Get(c)
-}
-
-func (bs *bswrapper) AddBlock(blk block.Block) error {
-	return bs.bs.Put(blk)
-}
-
-func CSTFromBstore(bs Blockstore) *CborIpldStore {
-	return &CborIpldStore{
-		Blocks: &bswrapper{bs},
-	}
-}
-
-type mockBlocks struct {
-	data map[cid.Cid][]byte
-}
-
-func newMockBlocks() *mockBlocks {
-	return &mockBlocks{make(map[cid.Cid][]byte)}
-}
-
-func (mb *mockBlocks) GetBlock(ctx context.Context, cid cid.Cid) (block.Block, error) {
-	d, ok := mb.data[cid]
-	if ok {
-		return block.NewBlock(d), nil
-	}
-	return nil, ErrNotFound
-}
-
-func (mb *mockBlocks) AddBlock(b block.Block) error {
-	mb.data[b.Cid()] = b.RawData()
-	return nil
+type nodes interface {
+	Get(context.Context, cid.Cid) (format.Node, error)
+	Add(context.Context, format.Node) error
 }
 
 func NewCborStore() *CborIpldStore {
-	return &CborIpldStore{Blocks: newMockBlocks()}
+	return &CborIpldStore{
+		Nodes: MustMemoryStore(),
+	}
+}
+
+
+func CSTFromDAG(dagservice format.DAGService) *CborIpldStore {
+	return &CborIpldStore{
+		Nodes:dagservice,
+	}
 }
 
 func (s *CborIpldStore) Get(ctx context.Context, c cid.Cid, out interface{}) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
 
-	blk, err := s.Blocks.GetBlock(ctx, c)
+	blk, err := s.Nodes.Get(ctx, c)
 	if err != nil {
 		return err
 	}
@@ -131,7 +96,7 @@ func (s *CborIpldStore) Put(ctx context.Context, v interface{}) (cid.Cid, error)
 		return cid.Cid{}, err
 	}
 
-	if err := s.Blocks.AddBlock(nd); err != nil {
+	if err := s.Nodes.Add(ctx, nd); err != nil {
 		return cid.Cid{}, err
 	}
 

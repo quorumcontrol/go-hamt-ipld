@@ -443,7 +443,7 @@ func TestValueLinking(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	blk, err := cs.Blocks.GetBlock(ctx, tcid)
+	blk, err := cs.Nodes.Get(ctx, tcid)
 	if err != nil {
 		t.Fatal(err)
 	}
