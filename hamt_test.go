@@ -456,3 +456,26 @@ func TestValueLinking(t *testing.T) {
 	fmt.Println("thingy1", c1)
 	fmt.Println(nd.Links()[0])
 }
+
+func BenchmarkSet(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	vals := make(map[string][]byte)
+	var keys []string
+	for i := 0; i < b.N; i++ {
+		s := randString()
+		vals[s] = randValue()
+		keys = append(keys, s)
+	}
+
+	cs := NewCborStore()
+	begn := NewNode(cs)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		begn.Set(ctx, keys[i], vals[keys[i]])
+		begn.Flush(ctx)
+	}
+	b.StopTimer()
+}

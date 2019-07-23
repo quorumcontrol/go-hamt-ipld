@@ -1,21 +1,15 @@
 package hamt
 
 import (
-	"github.com/ipfs/go-ipld-format"
 	"context"
-	"math"
 	"time"
 
-	/*
-		bstore "github.com/ipfs/go-ipfs/blocks/blockstore"
-				bserv "github.com/ipfs/go-ipfs/blockservice"
-				offline "github.com/ipfs/go-ipfs/exchange/offline"
-	*/
+	format "github.com/ipfs/go-ipld-format"
+	"github.com/multiformats/go-multihash"
 
 	cbor "github.com/ipfs/go-ipld-cbor"
-	recbor "github.com/polydawn/refmt/cbor"
 	atlas "github.com/polydawn/refmt/obj/atlas"
-	//ds "gx/ipfs/QmdHG8MAuARdGHxx4rPQASLcvhz24fzjSQq7AJRAQEorq5/go-datastore"
+
 	cid "github.com/ipfs/go-cid"
 )
 
@@ -41,7 +35,7 @@ func init() {
 
 type CborIpldStore struct {
 	Nodes nodes
-	Atlas  *atlas.Atlas
+	Atlas *atlas.Atlas
 }
 
 type nodes interface {
@@ -55,10 +49,9 @@ func NewCborStore() *CborIpldStore {
 	}
 }
 
-
 func CSTFromDAG(dagservice format.DAGService) *CborIpldStore {
 	return &CborIpldStore{
-		Nodes:dagservice,
+		Nodes: dagservice,
 	}
 }
 
@@ -71,27 +64,12 @@ func (s *CborIpldStore) Get(ctx context.Context, c cid.Cid, out interface{}) err
 		return err
 	}
 
-	if s.Atlas == nil {
-		return cbor.DecodeInto(blk.RawData(), out)
-	} else {
-		return recbor.UnmarshalAtlased(recbor.DecodeOptions{}, blk.RawData(), out, *s.Atlas)
-	}
-}
-
-type cidProvider interface {
-	Cid() cid.Cid
+	return cbor.DecodeInto(blk.RawData(), out)
 }
 
 func (s *CborIpldStore) Put(ctx context.Context, v interface{}) (cid.Cid, error) {
-	mhType := uint64(math.MaxUint64)
-	mhLen := -1
-	if c, ok := v.(cidProvider); ok {
-		pref := c.Cid().Prefix()
-		mhType = pref.MhType
-		mhLen = pref.MhLength
-	}
 
-	nd, err := cbor.WrapObject(v, mhType, mhLen)
+	nd, err := cbor.WrapObject(v, multihash.SHA2_256, -1)
 	if err != nil {
 		return cid.Cid{}, err
 	}
