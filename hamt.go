@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sync"
 
 	cid "github.com/ipfs/go-cid"
 	murmur3 "github.com/spaolacci/murmur3"
@@ -150,21 +151,27 @@ func (n *Node) checkSize(ctx context.Context) (uint64, error) {
 }
 
 func (n *Node) Flush(ctx context.Context) error {
+	var wg sync.WaitGroup
 	for _, p := range n.Pointers {
 		if p.cache != nil {
-			if err := p.cache.Flush(ctx); err != nil {
-				return err
-			}
+			wg.Add(1)
+			go func(p *Pointer) {
+				if err := p.cache.Flush(ctx); err != nil {
+					// return err
+				}
 
-			c, err := n.store.Put(ctx, p.cache)
-			if err != nil {
-				return err
-			}
+				c, err := n.store.Put(ctx, p.cache)
+				if err != nil {
+					// return err
+				}
 
-			p.cache = nil
-			p.Link = c
+				p.cache = nil
+				p.Link = c
+				wg.Done()
+			}(p)
 		}
 	}
+	wg.Wait()
 	return nil
 }
 
