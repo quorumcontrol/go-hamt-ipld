@@ -27,18 +27,7 @@ func init() {
 	cbor.RegisterCborType(cbor.BigIntAtlasEntry)
 	cbor.RegisterCborType(Node{})
 	cbor.RegisterCborType(Pointer{})
-
-	kvAtlasEntry := atlas.BuildEntry(KV{}).Transform().TransformMarshal(
-		atlas.MakeMarshalTransformFunc(func(kv KV) ([]interface{}, error) {
-			return []interface{}{kv.Key, kv.Value}, nil
-		})).TransformUnmarshal(
-		atlas.MakeUnmarshalTransformFunc(func(v []interface{}) (KV, error) {
-			return KV{
-				Key:   v[0].(string),
-				Value: v[1].([]byte),
-			}, nil
-		})).Complete()
-	cbor.RegisterCborType(kvAtlasEntry)
+	cbor.RegisterCborType(KV{})
 }
 
 type CborIpldStore struct {

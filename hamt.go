@@ -31,8 +31,8 @@ func NewNode(cs *CborIpldStore) *Node {
 }
 
 type KV struct {
-	Key   string
-	Value []byte
+	Key   string `refmt:"k,omitempty"`
+	Value []byte `refmt:"v,omitempty"`
 }
 
 type Pointer struct {
