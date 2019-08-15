@@ -6,6 +6,8 @@ import (
 	"math/big"
 	"sync"
 
+	cbor "github.com/ipfs/go-ipld-cbor"
+
 	cid "github.com/ipfs/go-cid"
 	murmur3 "github.com/spaolacci/murmur3"
 )
@@ -30,7 +32,7 @@ func NewNode(cs *CborIpldStore) *Node {
 
 type KV struct {
 	Key   string
-	Value interface{}
+	Value []byte
 }
 
 type Pointer struct {
@@ -50,7 +52,10 @@ var hash = func(k string) []byte {
 func (n *Node) Find(ctx context.Context, k string) (interface{}, error) {
 	var out interface{}
 	err := n.getValue(ctx, hash(k), 0, k, func(kv *KV) error {
-		out = kv.Value
+		err := cbor.DecodeInto(kv.Value, &out)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -183,7 +188,11 @@ func (n *Node) Flush(ctx context.Context) error {
 }
 
 func (n *Node) Set(ctx context.Context, k string, v interface{}) error {
-	return n.modifyValue(ctx, hash(k), 0, k, v)
+	nd, err := WrapObject(v)
+	if err != nil {
+		return err
+	}
+	return n.modifyValue(ctx, hash(k), 0, k, nd.RawData())
 }
 
 func (n *Node) cleanChild(chnd *Node, cindex byte) error {
@@ -220,7 +229,7 @@ func (n *Node) cleanChild(chnd *Node, cindex byte) error {
 	}
 }
 
-func (n *Node) modifyValue(ctx context.Context, hv []byte, depth int, k string, v interface{}) error {
+func (n *Node) modifyValue(ctx context.Context, hv []byte, depth int, k string, v []byte) error {
 	if depth >= len(hv) {
 		return ErrMaxDepth
 	}
@@ -309,7 +318,7 @@ func (n *Node) modifyValue(ctx context.Context, hv []byte, depth int, k string, 
 	return nil
 }
 
-func (n *Node) insertChild(idx int, k string, v interface{}) error {
+func (n *Node) insertChild(idx int, k string, v []byte) error {
 	if v == nil {
 		return ErrNotFound
 	}

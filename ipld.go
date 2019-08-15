@@ -1,10 +1,11 @@
 package hamt
 
 import (
-	"github.com/ipfs/go-ipld-format"
 	"context"
 	"math"
 	"time"
+
+	format "github.com/ipfs/go-ipld-format"
 
 	/*
 		bstore "github.com/ipfs/go-ipfs/blocks/blockstore"
@@ -15,6 +16,7 @@ import (
 	cbor "github.com/ipfs/go-ipld-cbor"
 	recbor "github.com/polydawn/refmt/cbor"
 	atlas "github.com/polydawn/refmt/obj/atlas"
+
 	//ds "gx/ipfs/QmdHG8MAuARdGHxx4rPQASLcvhz24fzjSQq7AJRAQEorq5/go-datastore"
 	cid "github.com/ipfs/go-cid"
 )
@@ -33,7 +35,7 @@ func init() {
 		atlas.MakeUnmarshalTransformFunc(func(v []interface{}) (KV, error) {
 			return KV{
 				Key:   v[0].(string),
-				Value: v[1],
+				Value: v[1].([]byte),
 			}, nil
 		})).Complete()
 	cbor.RegisterCborType(kvAtlasEntry)
@@ -41,7 +43,7 @@ func init() {
 
 type CborIpldStore struct {
 	Nodes nodes
-	Atlas  *atlas.Atlas
+	Atlas *atlas.Atlas
 }
 
 type nodes interface {
@@ -55,10 +57,9 @@ func NewCborStore() *CborIpldStore {
 	}
 }
 
-
 func CSTFromDAG(dagservice format.DAGService) *CborIpldStore {
 	return &CborIpldStore{
-		Nodes:dagservice,
+		Nodes: dagservice,
 	}
 }
 
@@ -83,22 +84,24 @@ type cidProvider interface {
 }
 
 func (s *CborIpldStore) Put(ctx context.Context, v interface{}) (cid.Cid, error) {
-	mhType := uint64(math.MaxUint64)
-	mhLen := -1
-	if c, ok := v.(cidProvider); ok {
-		pref := c.Cid().Prefix()
-		mhType = pref.MhType
-		mhLen = pref.MhLength
-	}
-
-	nd, err := cbor.WrapObject(v, mhType, mhLen)
+	nd, err := WrapObject(v)
 	if err != nil {
-		return cid.Cid{}, err
+		return cid.Undef, err
 	}
-
 	if err := s.Nodes.Add(ctx, nd); err != nil {
-		return cid.Cid{}, err
+		return cid.Undef, err
 	}
 
 	return nd.Cid(), nil
+}
+
+const mhType = uint64(math.MaxUint64)
+const mhLen = -1
+
+func WrapObject(v interface{}) (format.Node, error) {
+	nd, err := cbor.WrapObject(v, mhType, mhLen)
+	if err != nil {
+		return nil, err
+	}
+	return nd, nil
 }
