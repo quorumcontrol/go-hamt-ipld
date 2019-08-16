@@ -254,10 +254,17 @@ func TestSetGet(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Println("flush took: ", time.Since(bef))
+
+	fmt.Println("put of root node start")
+	bef = time.Now()
+	if err != nil {
+		t.Fatal(err)
+	}
 	c, err := cs.Put(ctx, begn)
 	if err != nil {
 		t.Fatal(err)
 	}
+	fmt.Println("put of root node took: ", time.Since(bef), " pointer len: ", len(begn.Pointers))
 
 	var n Node
 	if err := cs.Get(ctx, c, &n); err != nil {
@@ -453,6 +460,12 @@ func TestValueLinking(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var decodedNode Node
+	cbor.DecodeInto(nd.RawData(), &decodedNode)
+
+	var decodedVal map[string]interface{}
+	cbor.DecodeInto(decodedNode.Pointers[0].KVs[0].Value, &decodedVal)
+
 	fmt.Println("thingy1", c1)
-	fmt.Println(nd.Links()[0])
+	fmt.Println(decodedVal)
 }
