@@ -76,7 +76,7 @@ func (n *Node) getValue(ctx context.Context, hv []byte, depth int, k string, cb 
 		return ErrMaxDepth
 	}
 
-	idx := hv[depth]
+	idx := int(hv[depth] / 2)
 	if n.Bitfield.Bit(int(idx)) == 0 {
 		return ErrNotFound
 	}
@@ -236,7 +236,7 @@ func (n *Node) modifyValue(ctx context.Context, hv []byte, depth int, k string, 
 	if depth >= len(hv) {
 		return ErrMaxDepth
 	}
-	idx := int(hv[depth])
+	idx := int(hv[depth] / 2)
 
 	if n.Bitfield.Bit(idx) != 1 {
 		return n.insertChild(idx, k, v)
