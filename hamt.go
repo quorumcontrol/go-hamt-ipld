@@ -176,6 +176,8 @@ func (n *Node) Flush(ctx context.Context) error {
 				}
 
 				p.cache = nil
+				// if p is a shard no need to keep the KVs around
+				p.KVs = nil
 				p.Link = c
 			}(p)
 		}
@@ -184,6 +186,7 @@ func (n *Node) Flush(ctx context.Context) error {
 	if len(errChan) > 0 {
 		return <-errChan
 	}
+
 	return nil
 }
 

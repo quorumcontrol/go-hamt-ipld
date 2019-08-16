@@ -257,9 +257,6 @@ func TestSetGet(t *testing.T) {
 
 	fmt.Println("put of root node start")
 	bef = time.Now()
-	if err != nil {
-		t.Fatal(err)
-	}
 	c, err := cs.Put(ctx, begn)
 	if err != nil {
 		t.Fatal(err)
