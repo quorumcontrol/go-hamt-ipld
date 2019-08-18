@@ -3,6 +3,8 @@ package hamt
 import (
 	"context"
 	"testing"
+
+	"github.com/quorumcontrol/go-hamt-ipld/pb"
 )
 
 func TestRoundtrip(t *testing.T) {
@@ -14,7 +16,7 @@ func TestRoundtrip(t *testing.T) {
 	n.Bitfield.SetBit(n.Bitfield, 7, 1)
 	n.Bitfield.SetBit(n.Bitfield, 18, 1)
 
-	n.Pointers = []*Pointer{{KVs: []*KV{{Key: "foo", Value: []byte("bar")}}}}
+	n.Pointers = []*Pointer{{Pointer: &pb.Pointer{Kvs: []*pb.KV{{Key: "foo", Value: []byte("bar")}}}}}
 
 	c, err := cs.Put(ctx, n)
 	if err != nil {

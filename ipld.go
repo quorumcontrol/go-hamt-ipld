@@ -2,10 +2,13 @@ package hamt
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	format "github.com/ipfs/go-ipld-format"
+	"github.com/quorumcontrol/go-hamt-ipld/goipldpb"
 
 	/*
 		bstore "github.com/ipfs/go-ipfs/blocks/blockstore"
@@ -14,21 +17,11 @@ import (
 	*/
 
 	cbor "github.com/ipfs/go-ipld-cbor"
-	recbor "github.com/polydawn/refmt/cbor"
 	atlas "github.com/polydawn/refmt/obj/atlas"
 
 	//ds "gx/ipfs/QmdHG8MAuARdGHxx4rPQASLcvhz24fzjSQq7AJRAQEorq5/go-datastore"
 	cid "github.com/ipfs/go-cid"
 )
-
-// THIS IS ALL TEMPORARY CODE
-
-func init() {
-	cbor.RegisterCborType(cbor.BigIntAtlasEntry)
-	cbor.RegisterCborType(Node{})
-	cbor.RegisterCborType(Pointer{})
-	cbor.RegisterCborType(KV{})
-}
 
 type CborIpldStore struct {
 	Nodes nodes
@@ -58,13 +51,18 @@ func (s *CborIpldStore) Get(ctx context.Context, c cid.Cid, out interface{}) err
 
 	blk, err := s.Nodes.Get(ctx, c)
 	if err != nil {
-		return err
+		return fmt.Errorf("error getting: %v", err)
 	}
 
-	if s.Atlas == nil {
+	switch c.Type() {
+	case cid.DagProtobuf:
+		msg, ok := out.(proto.Message)
+		if !ok {
+			return fmt.Errorf("could not convert %v into proto.Message", out)
+		}
+		return goipldpb.DecodeInto(blk.RawData(), msg)
+	default:
 		return cbor.DecodeInto(blk.RawData(), out)
-	} else {
-		return recbor.UnmarshalAtlased(recbor.DecodeOptions{}, blk.RawData(), out, *s.Atlas)
 	}
 }
 
@@ -72,8 +70,21 @@ type cidProvider interface {
 	Cid() cid.Cid
 }
 
+const mhType = uint64(math.MaxUint64)
+const mhLen = -1
+
 func (s *CborIpldStore) Put(ctx context.Context, v interface{}) (cid.Cid, error) {
-	nd, err := WrapObject(v)
+	var nd format.Node
+	var err error
+	switch msg := v.(type) {
+	case proto.Message:
+		nd, err = goipldpb.WrapObject(msg)
+	default:
+		nd, err = WrapObject(v)
+		if err != nil {
+			return cid.Undef, err
+		}
+	}
 	if err != nil {
 		return cid.Undef, err
 	}
@@ -83,9 +94,6 @@ func (s *CborIpldStore) Put(ctx context.Context, v interface{}) (cid.Cid, error)
 
 	return nd.Cid(), nil
 }
-
-const mhType = uint64(math.MaxUint64)
-const mhLen = -1
 
 func WrapObject(v interface{}) (format.Node, error) {
 	nd, err := cbor.WrapObject(v, mhType, mhLen)

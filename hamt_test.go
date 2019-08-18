@@ -176,7 +176,7 @@ func dotGraphRec(n *Node, name *int) {
 			dotGraphRec(nd, name)
 		} else {
 			var names []string
-			for _, pt := range p.KVs {
+			for _, pt := range p.Kvs {
 				names = append(names, pt.Key)
 			}
 			fmt.Printf("\tn%d -> n%s;\n", cur, strings.Join(names, "_"))
@@ -207,8 +207,8 @@ func statsrec(n *Node, st *hamtStats) {
 
 			statsrec(nd, st)
 		} else {
-			st.totalKvs += len(p.KVs)
-			st.counts[len(p.KVs)]++
+			st.totalKvs += len(p.Kvs)
+			st.counts[len(p.Kvs)]++
 		}
 	}
 }
@@ -373,13 +373,13 @@ func TestCopyCopiesNilSlices(t *testing.T) {
 	pointer := &Pointer{}
 	n.Pointers = append(n.Pointers, pointer)
 
-	if n.Pointers[0].KVs != nil {
+	if n.Pointers[0].Kvs != nil {
 		t.Fatal("Expected uninitialize slice to be nil")
 	}
 
 	nc := n.Copy()
 
-	if nc.Pointers[0].KVs != nil {
+	if nc.Pointers[0].Kvs != nil {
 		t.Fatal("Expected copied nil slices to be nil")
 	}
 }
@@ -461,7 +461,7 @@ func TestValueLinking(t *testing.T) {
 	cbor.DecodeInto(nd.RawData(), &decodedNode)
 
 	var decodedVal map[string]interface{}
-	cbor.DecodeInto(decodedNode.Pointers[0].KVs[0].Value, &decodedVal)
+	cbor.DecodeInto(decodedNode.Pointers[0].Kvs[0].Value, &decodedVal)
 
 	fmt.Println("thingy1", c1)
 	fmt.Println(decodedVal)

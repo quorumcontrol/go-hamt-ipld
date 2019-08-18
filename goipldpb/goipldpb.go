@@ -2,89 +2,93 @@ package goipldpb
 
 import (
 	"fmt"
-	"math"
+	"strings"
 
-	blocks "github.com/ipfs/go-block-format"
-	cid "github.com/ipfs/go-cid"
+	ptypes "github.com/gogo/protobuf/types"
+
 	format "github.com/ipfs/go-ipld-format"
-	node "github.com/ipfs/go-ipld-format"
-	mh "github.com/multiformats/go-multihash"
+	"github.com/ipfs/go-merkledag"
 
 	"github.com/gogo/protobuf/proto"
 )
 
+const googleApis = "type.googleapis.com/"
+
 var ErrUnimplemented = fmt.Errorf("unimplemented")
 
-type Node struct {
-	blocks.Block
-}
-
-func WrapObject(msg proto.Marshaler, mhType uint64, mhLen int) (format.Node, error) {
-	data, err := msg.Marshal()
+func WrapObject(msg proto.Message) (format.Node, error) {
+	any, err := marshalAny(msg)
 	if err != nil {
 		return nil, err
 	}
 
-	if mhType == math.MaxUint64 {
-		mhType = mh.SHA2_256
-	}
-
-	hash, err := mh.Sum(data, mhType, mhLen)
+	data, err := any.Marshal()
 	if err != nil {
 		return nil, err
 	}
-	c := cid.NewCidV1(cid.DagCBOR, hash)
 
-	block, err := blocks.NewBlockWithCid(data, c)
+	return merkledag.NodeWithData(data), nil
+}
+
+func DecodeInto(bits []byte, out proto.Message) error {
+	protonode, err := merkledag.DecodeProtobuf(bits)
 	if err != nil {
-		// TODO: Shouldn't this just panic?
+		return err
+	}
+	any := new(ptypes.Any)
+	if err := any.Unmarshal(protonode.Data()); err != nil {
+		return err
+	}
+	return unmarshalAny(any, out)
+}
+
+// UnmarshalAny parses the protocol buffer representation in a google.protobuf.Any
+// message and places the decoded result in pb. It returns an error if type of
+// contents of Any message does not match type of pb message.
+//
+// pb can be a proto.Message, or a *DynamicAny.
+func unmarshalAny(any *ptypes.Any, pb proto.Message) error {
+	unmarshaler, ok := pb.(proto.Unmarshaler)
+	if !ok {
+		return fmt.Errorf("message must support unmarshal")
+	}
+	aname, err := anyMessageName(any)
+	if err != nil {
+		return err
+	}
+
+	mname := proto.MessageName(pb)
+	if aname != mname {
+		return fmt.Errorf("mismatched message type: got %q want %q", aname, mname)
+	}
+	return unmarshaler.Unmarshal(any.Value)
+}
+
+// MarshalAny takes the protocol buffer and encodes it into google.protobuf.Any.
+func marshalAny(pb proto.Message) (*ptypes.Any, error) {
+	marshaler, ok := pb.(proto.Marshaler)
+	if !ok {
+		return nil, fmt.Errorf("proto message must support Marshal")
+	}
+	value, err := marshaler.Marshal()
+	if err != nil {
 		return nil, err
 	}
-
-	return &Node{
-		Block: block,
-	}, nil
+	return &ptypes.Any{TypeUrl: googleApis + proto.MessageName(pb), Value: value}, nil
 }
 
-func DecodeInto(bits []byte, out proto.Unmarshaler) error {
-	return out.Unmarshal(bits)
-}
-
-// Copy creates a copy of the Node.
-func (n *Node) Copy() node.Node {
-	return &Node{
-		Block: n.Block,
+// AnyMessageName returns the name of the message contained in a google.protobuf.Any message.
+//
+// Note that regular type assertions should be done using the Is
+// function. AnyMessageName is provided for less common use cases like filtering a
+// sequence of Any messages based on a set of allowed message type names.
+func anyMessageName(any *ptypes.Any) (string, error) {
+	if any == nil {
+		return "", fmt.Errorf("message is nil")
 	}
-}
-
-func (n *Node) Cid() cid.Cid {
-	return n.Block.Cid()
-}
-
-func (n *Node) Loggable() map[string]interface{} {
-	return n.Block.Loggable()
-}
-
-func (n *Node) Links() []*node.Link {
-	return nil
-}
-
-func (n *Node) Resolve(path []string) (interface{}, []string, error) {
-	return nil, nil, ErrUnimplemented
-}
-
-func (n *Node) ResolveLink([]string) (*format.Link, []string, error) {
-	return nil, nil, ErrUnimplemented
-}
-
-func (n *Node) Size() (uint64, error) {
-	return uint64(len(n.RawData())), nil
-}
-
-func (n *Node) Stat() (*node.NodeStat, error) {
-	return &node.NodeStat{}, nil
-}
-
-func (n *Node) Tree(path string, depth int) []string {
-	return nil
+	slash := strings.LastIndex(any.TypeUrl, "/")
+	if slash < 0 {
+		return "", fmt.Errorf("message type url %q is invalid", any.TypeUrl)
+	}
+	return any.TypeUrl[slash+1:], nil
 }

@@ -1,7 +1,6 @@
 package goipldpb
 
 import (
-	"math"
 	"testing"
 
 	"github.com/quorumcontrol/go-hamt-ipld/pb"
@@ -12,7 +11,7 @@ func TestWrapObject(t *testing.T) {
 		Key:   "hi",
 		Value: []byte("hi"),
 	}
-	_, err := WrapObject(kv, uint64(math.MaxUint64), -1)
+	_, err := WrapObject(kv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +22,7 @@ func TestDecodeInto(t *testing.T) {
 		Key:   "hi",
 		Value: []byte("hi"),
 	}
-	nd, err := WrapObject(kv, uint64(math.MaxUint64), -1)
+	nd, err := WrapObject(kv)
 	if err != nil {
 		t.Fatal(err)
 	}
