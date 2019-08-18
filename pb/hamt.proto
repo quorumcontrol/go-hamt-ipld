@@ -16,7 +16,7 @@ message Pointer {
 }
 
 message Node {
-    uint64 bitfield = 1;
+    bytes bitfield = 1;
     repeated Pointer pointers = 2;
 }
 

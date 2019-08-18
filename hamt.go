@@ -35,21 +35,21 @@ func fromProtobufs(pbs []*pb.Pointer) pointerSlice {
 }
 
 type Node struct {
-	*pb.Node
 	Bitfield *big.Int     `refmt:"bf"`
 	Pointers pointerSlice `refmt:"p"`
 
 	// for fetching and storing children
-	store *CborIpldStore
+	store  *CborIpldStore
+	pbNode *pb.Node
 }
 
 func (n *Node) Marshal() ([]byte, error) {
-	if n.Node == nil {
-		n.Node = new(pb.Node)
+	if n.pbNode == nil {
+		n.pbNode = new(pb.Node)
 	}
-	n.Node.Bitfield = n.Bitfield.Uint64()
-	n.Node.Pointers = n.Pointers.toProtoBufs()
-	return n.Node.Marshal()
+	n.pbNode.Bitfield = n.Bitfield.Bytes()
+	n.pbNode.Pointers = n.Pointers.toProtoBufs()
+	return n.pbNode.Marshal()
 }
 
 func (n *Node) Unmarshal(bits []byte) error {
@@ -57,23 +57,29 @@ func (n *Node) Unmarshal(bits []byte) error {
 	if err := pbNode.Unmarshal(bits); err != nil {
 		return err
 	}
-	n.Bitfield = new(big.Int).SetUint64(pbNode.Bitfield)
+	n.Bitfield = new(big.Int).SetBytes(pbNode.Bitfield)
 	n.Pointers = fromProtobufs(pbNode.Pointers)
 	return nil
 }
 
-func (n *Node) XXX_Marshal() ([]byte, error) {
-	return n.Marshal()
+func (n *Node) Reset() {
+	// n.pbNode = new(pb.Node)
 }
 
-func (n *Node) XXX_Size() {
+func (n *Node) String() string {
+	n.Marshal()
+	return n.pbNode.String()
+}
+
+func (n *Node) ProtoMessage() {
 	return
 }
 
 func NewNode(cs *CborIpldStore) *Node {
 	return &Node{
+		pbNode:   new(pb.Node),
 		Bitfield: big.NewInt(0),
-		Pointers: make([]*Pointer, 0),
+		Pointers: make(pointerSlice, 0),
 		store:    cs,
 	}
 }
@@ -236,7 +242,8 @@ func (n *Node) Set(ctx context.Context, k string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	return n.modifyValue(ctx, hash(k), 0, k, nd.RawData())
+	err = n.modifyValue(ctx, hash(k), 0, k, nd.RawData())
+	return err
 }
 
 func (n *Node) cleanChild(chnd *Node, cindex byte) error {
@@ -280,7 +287,8 @@ func (n *Node) modifyValue(ctx context.Context, hv []byte, depth int, k string, 
 	idx := int(hv[depth])
 
 	if n.Bitfield.Bit(idx) != 1 {
-		return n.insertChild(idx, k, v)
+		err := n.insertChild(idx, k, v)
+		return err
 	}
 
 	cindex := byte(n.indexForBitPos(idx))
@@ -373,7 +381,6 @@ func (n *Node) insertChild(idx int, k string, v []byte) error {
 	n.Bitfield.SetBit(n.Bitfield, idx, 1)
 
 	p := &Pointer{Pointer: &pb.Pointer{Kvs: []*pb.KV{{Key: k, Value: v}}}}
-
 	n.Pointers = append(n.Pointers[:i], append([]*Pointer{p}, n.Pointers[i:]...)...)
 	return nil
 }

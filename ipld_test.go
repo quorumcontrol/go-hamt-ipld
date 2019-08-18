@@ -7,6 +7,17 @@ import (
 	"github.com/quorumcontrol/go-hamt-ipld/pb"
 )
 
+func TestWhatTheHell(t *testing.T) {
+	cs := NewCborStore()
+	n := NewNode(cs)
+	n.Bitfield.SetBit(n.Bitfield, 5, 1)
+	n.Bitfield.SetBit(n.Bitfield, 7, 1)
+	n.Bitfield.SetBit(n.Bitfield, 18, 1)
+
+	n.Pointers = []*Pointer{{Pointer: &pb.Pointer{Kvs: []*pb.KV{{Key: "foo", Value: []byte("bar")}}}}}
+	t.Log(n)
+}
+
 func TestRoundtrip(t *testing.T) {
 	ctx := context.Background()
 
@@ -17,7 +28,8 @@ func TestRoundtrip(t *testing.T) {
 	n.Bitfield.SetBit(n.Bitfield, 18, 1)
 
 	n.Pointers = []*Pointer{{Pointer: &pb.Pointer{Kvs: []*pb.KV{{Key: "foo", Value: []byte("bar")}}}}}
-
+	t.Log(n)
+	t.Log(n.Bitfield)
 	c, err := cs.Put(ctx, n)
 	if err != nil {
 		t.Fatal(err)

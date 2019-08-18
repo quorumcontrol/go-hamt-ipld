@@ -101,7 +101,9 @@ func addAndRemoveKeys(t *testing.T, keys []string, extraKeys []string) {
 
 	cs := NewCborStore()
 	begn := NewNode(cs)
+
 	for _, k := range keys {
+		fmt.Println("set ", k)
 		if err := begn.Set(ctx, k, vals[k]); err != nil {
 			t.Fatal(err)
 		}

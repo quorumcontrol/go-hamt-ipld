@@ -7,6 +7,9 @@ import (
 )
 
 func (p *Pointer) Link() cid.Cid {
+	if len(p.LinkBits) == 0 {
+		return cid.Undef
+	}
 	c, err := cid.Cast(p.LinkBits)
 	if err != nil {
 		fmt.Println("unknown CID")
