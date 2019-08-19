@@ -11,6 +11,7 @@ import (
 	"time"
 
 	cbor "github.com/ipfs/go-ipld-cbor"
+	"github.com/quorumcontrol/go-hamt-ipld/goipldpb"
 )
 
 func randString() string {
@@ -372,7 +373,7 @@ func TestCopyCopiesNilSlices(t *testing.T) {
 	cs := NewCborStore()
 
 	n := NewNode(cs)
-	pointer := &Pointer{}
+	pointer := newPointer()
 	n.Pointers = append(n.Pointers, pointer)
 
 	if n.Pointers[0].Kvs != nil {
@@ -454,13 +455,8 @@ func TestValueLinking(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nd, err := cbor.DecodeBlock(blk)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	var decodedNode Node
-	cbor.DecodeInto(nd.RawData(), &decodedNode)
+	goipldpb.DecodeInto(blk.RawData(), &decodedNode)
 
 	var decodedVal map[string]interface{}
 	cbor.DecodeInto(decodedNode.Pointers[0].Kvs[0].Value, &decodedVal)

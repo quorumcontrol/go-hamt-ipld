@@ -44,12 +44,16 @@ type Node struct {
 }
 
 func (n *Node) Marshal() ([]byte, error) {
+	n.populatePbNode()
+	return n.pbNode.Marshal()
+}
+
+func (n *Node) populatePbNode() {
 	if n.pbNode == nil {
 		n.pbNode = new(pb.Node)
 	}
 	n.pbNode.Bitfield = n.Bitfield.Bytes()
 	n.pbNode.Pointers = n.Pointers.toProtoBufs()
-	return n.pbNode.Marshal()
 }
 
 func (n *Node) Unmarshal(bits []byte) error {
@@ -62,18 +66,21 @@ func (n *Node) Unmarshal(bits []byte) error {
 	return nil
 }
 
+// Reset implements the proto.Message interface
 func (n *Node) Reset() {
-	// n.pbNode = new(pb.Node)
+	n.Bitfield = big.NewInt(0)
+	n.Pointers = make(pointerSlice, 0)
+	n.populatePbNode()
 }
 
+// String implements the proto.Message interface
 func (n *Node) String() string {
-	n.Marshal()
+	n.populatePbNode()
 	return n.pbNode.String()
 }
 
-func (n *Node) ProtoMessage() {
-	return
-}
+// ProtoMessage implements the proto.Message interface
+func (n *Node) ProtoMessage() {}
 
 func NewNode(cs *CborIpldStore) *Node {
 	return &Node{
@@ -88,6 +95,10 @@ type Pointer struct {
 	*pb.Pointer
 	// cached node to avoid too many serialization operations
 	cache *Node
+}
+
+func newPointer() *Pointer {
+	return &Pointer{Pointer: new(pb.Pointer)}
 }
 
 var hash = func(k string) []byte {
@@ -412,7 +423,7 @@ func (n *Node) Copy() *Node {
 	nn.Pointers = make([]*Pointer, len(n.Pointers))
 
 	for i, p := range n.Pointers {
-		pp := &Pointer{}
+		pp := &Pointer{Pointer: new(pb.Pointer)}
 		if p.cache != nil {
 			pp.cache = p.cache.Copy()
 		}
