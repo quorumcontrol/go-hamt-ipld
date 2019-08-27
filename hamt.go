@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	cbor "github.com/ipfs/go-ipld-cbor"
+	"github.com/quorumcontrol/go-hamt-ipld/pb"
 
 	cid "github.com/ipfs/go-cid"
 	murmur3 "github.com/spaolacci/murmur3"
@@ -14,33 +15,90 @@ import (
 
 const arrayWidth = 3
 
+type pointerSlice []*Pointer
+
+func (ps pointerSlice) toProtoBufs() []*pb.Pointer {
+	ret := make([]*pb.Pointer, len(ps))
+	for i, p := range ps {
+		ret[i] = p.Pointer
+	}
+	return ret
+}
+
+func fromProtobufs(pbs []*pb.Pointer) pointerSlice {
+	ret := make(pointerSlice, len(pbs))
+
+	for i, p := range pbs {
+		ret[i] = &Pointer{Pointer: p}
+	}
+	return ret
+}
+
 type Node struct {
-	Bitfield *big.Int   `refmt:"bf"`
-	Pointers []*Pointer `refmt:"p"`
+	Bitfield *big.Int     `refmt:"bf"`
+	Pointers pointerSlice `refmt:"p"`
 
 	// for fetching and storing children
-	store *CborIpldStore
+	store  *CborIpldStore
+	pbNode *pb.Node
 }
+
+func (n *Node) Marshal() ([]byte, error) {
+	n.populatePbNode()
+	return n.pbNode.Marshal()
+}
+
+func (n *Node) populatePbNode() {
+	if n.pbNode == nil {
+		n.pbNode = new(pb.Node)
+	}
+	n.pbNode.Bitfield = n.Bitfield.Bytes()
+	n.pbNode.Pointers = n.Pointers.toProtoBufs()
+}
+
+func (n *Node) Unmarshal(bits []byte) error {
+	pbNode := new(pb.Node)
+	if err := pbNode.Unmarshal(bits); err != nil {
+		return err
+	}
+	n.Bitfield = new(big.Int).SetBytes(pbNode.Bitfield)
+	n.Pointers = fromProtobufs(pbNode.Pointers)
+	return nil
+}
+
+// Reset implements the proto.Message interface
+func (n *Node) Reset() {
+	n.Bitfield = big.NewInt(0)
+	n.Pointers = make(pointerSlice, 0)
+	n.populatePbNode()
+}
+
+// String implements the proto.Message interface
+func (n *Node) String() string {
+	n.populatePbNode()
+	return n.pbNode.String()
+}
+
+// ProtoMessage implements the proto.Message interface
+func (n *Node) ProtoMessage() {}
 
 func NewNode(cs *CborIpldStore) *Node {
 	return &Node{
+		pbNode:   new(pb.Node),
 		Bitfield: big.NewInt(0),
-		Pointers: make([]*Pointer, 0),
+		Pointers: make(pointerSlice, 0),
 		store:    cs,
 	}
 }
 
-type KV struct {
-	Key   string `refmt:"k,omitempty"`
-	Value []byte `refmt:"v,omitempty"`
-}
-
 type Pointer struct {
-	KVs  []*KV   `refmt:"v,omitempty"`
-	Link cid.Cid `refmt:"l,omitempty"`
-
+	*pb.Pointer
 	// cached node to avoid too many serialization operations
 	cache *Node
+}
+
+func newPointer() *Pointer {
+	return &Pointer{Pointer: new(pb.Pointer)}
 }
 
 var hash = func(k string) []byte {
@@ -51,7 +109,7 @@ var hash = func(k string) []byte {
 
 func (n *Node) Find(ctx context.Context, k string) (interface{}, error) {
 	var out interface{}
-	err := n.getValue(ctx, hash(k), 0, k, func(kv *KV) error {
+	err := n.getValue(ctx, hash(k), 0, k, func(kv *pb.KV) error {
 		err := cbor.DecodeInto(kv.Value, &out)
 		if err != nil {
 			return err
@@ -71,7 +129,7 @@ func (n *Node) Delete(ctx context.Context, k string) error {
 var ErrNotFound = fmt.Errorf("not found")
 var ErrMaxDepth = fmt.Errorf("attempted to traverse hamt beyond max depth")
 
-func (n *Node) getValue(ctx context.Context, hv []byte, depth int, k string, cb func(*KV) error) error {
+func (n *Node) getValue(ctx context.Context, hv []byte, depth int, k string, cb func(*pb.KV) error) error {
 	if depth >= len(hv) {
 		return ErrMaxDepth
 	}
@@ -93,7 +151,7 @@ func (n *Node) getValue(ctx context.Context, hv []byte, depth int, k string, cb 
 		return chnd.getValue(ctx, hv, depth+1, k, cb)
 	}
 
-	for _, kv := range c.KVs {
+	for _, kv := range c.Kvs {
 		if kv.Key == k {
 			return cb(kv)
 		}
@@ -107,7 +165,7 @@ func (p *Pointer) loadChild(ctx context.Context, ns *CborIpldStore) (*Node, erro
 		return p.cache, nil
 	}
 
-	out, err := LoadNode(ctx, ns, p.Link)
+	out, err := LoadNode(ctx, ns, p.Link())
 	if err != nil {
 		return nil, err
 	}
@@ -176,9 +234,9 @@ func (n *Node) Flush(ctx context.Context) error {
 				}
 
 				p.cache = nil
-				// if p is a shard no need to keep the KVs around
-				p.KVs = nil
-				p.Link = c
+				// if p is a shard no need to keep the Kvs around
+				p.Kvs = nil
+				p.SetLink(c)
 			}(p)
 		}
 	}
@@ -195,7 +253,8 @@ func (n *Node) Set(ctx context.Context, k string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	return n.modifyValue(ctx, hash(k), 0, k, nd.RawData())
+	err = n.modifyValue(ctx, hash(k), 0, k, nd.RawData())
+	return err
 }
 
 func (n *Node) cleanChild(chnd *Node, cindex byte) error {
@@ -213,20 +272,20 @@ func (n *Node) cleanChild(chnd *Node, cindex byte) error {
 
 		return n.setChild(cindex, ps)
 	case l <= arrayWidth:
-		var chvals []*KV
+		var chvals []*pb.KV
 		for _, p := range chnd.Pointers {
 			if p.isShard() {
 				return nil
 			}
 
-			for _, sp := range p.KVs {
+			for _, sp := range p.Kvs {
 				if len(chvals) == arrayWidth {
 					return nil
 				}
 				chvals = append(chvals, sp)
 			}
 		}
-		return n.setChild(cindex, &Pointer{KVs: chvals})
+		return n.setChild(cindex, &Pointer{Pointer: &pb.Pointer{Kvs: chvals}})
 	default:
 		return nil
 	}
@@ -239,7 +298,8 @@ func (n *Node) modifyValue(ctx context.Context, hv []byte, depth int, k string, 
 	idx := int(hv[depth])
 
 	if n.Bitfield.Bit(idx) != 1 {
-		return n.insertChild(idx, k, v)
+		err := n.insertChild(idx, k, v)
+		return err
 	}
 
 	cindex := byte(n.indexForBitPos(idx))
@@ -266,14 +326,14 @@ func (n *Node) modifyValue(ctx context.Context, hv []byte, depth int, k string, 
 	}
 
 	if v == nil {
-		for i, p := range child.KVs {
+		for i, p := range child.Kvs {
 			if p.Key == k {
-				if len(child.KVs) == 1 {
+				if len(child.Kvs) == 1 {
 					return n.rmChild(cindex, idx)
 				}
 
-				copy(child.KVs[i:], child.KVs[i+1:])
-				child.KVs = child.KVs[:len(child.KVs)-1]
+				copy(child.Kvs[i:], child.Kvs[i+1:])
+				child.Kvs = child.Kvs[:len(child.Kvs)-1]
 				return nil
 			}
 		}
@@ -281,7 +341,7 @@ func (n *Node) modifyValue(ctx context.Context, hv []byte, depth int, k string, 
 	}
 
 	// check if key already exists
-	for _, p := range child.KVs {
+	for _, p := range child.Kvs {
 		if p.Key == k {
 			p.Value = v
 			return nil
@@ -289,13 +349,13 @@ func (n *Node) modifyValue(ctx context.Context, hv []byte, depth int, k string, 
 	}
 
 	// If the array is full, create a subshard and insert everything into it
-	if len(child.KVs) >= arrayWidth {
+	if len(child.Kvs) >= arrayWidth {
 		sub := NewNode(n.store)
 		if err := sub.modifyValue(ctx, hv, depth+1, k, v); err != nil {
 			return err
 		}
 
-		for _, p := range child.KVs {
+		for _, p := range child.Kvs {
 			if err := sub.modifyValue(ctx, hash(p.Key), depth+1, p.Key, p.Value); err != nil {
 				return err
 			}
@@ -306,18 +366,20 @@ func (n *Node) modifyValue(ctx context.Context, hv []byte, depth int, k string, 
 			return err
 		}
 
-		return n.setChild(cindex, &Pointer{Link: c})
+		p := new(pb.Pointer)
+		p.SetLink(c)
+		return n.setChild(cindex, &Pointer{Pointer: p})
 	}
 
 	// otherwise insert the new element into the array in order
-	np := &KV{Key: k, Value: v}
-	for i := 0; i < len(child.KVs); i++ {
-		if k < child.KVs[i].Key {
-			child.KVs = append(child.KVs[:i], append([]*KV{np}, child.KVs[i:]...)...)
+	np := &pb.KV{Key: k, Value: v}
+	for i := 0; i < len(child.Kvs); i++ {
+		if k < child.Kvs[i].Key {
+			child.Kvs = append(child.Kvs[:i], append([]*pb.KV{np}, child.Kvs[i:]...)...)
 			return nil
 		}
 	}
-	child.KVs = append(child.KVs, np)
+	child.Kvs = append(child.Kvs, np)
 	return nil
 }
 
@@ -329,8 +391,7 @@ func (n *Node) insertChild(idx int, k string, v []byte) error {
 	i := n.indexForBitPos(idx)
 	n.Bitfield.SetBit(n.Bitfield, idx, 1)
 
-	p := &Pointer{KVs: []*KV{{Key: k, Value: v}}}
-
+	p := &Pointer{Pointer: &pb.Pointer{Kvs: []*pb.KV{{Key: k, Value: v}}}}
 	n.Pointers = append(n.Pointers[:i], append([]*Pointer{p}, n.Pointers[i:]...)...)
 	return nil
 }
@@ -362,15 +423,15 @@ func (n *Node) Copy() *Node {
 	nn.Pointers = make([]*Pointer, len(n.Pointers))
 
 	for i, p := range n.Pointers {
-		pp := &Pointer{}
+		pp := &Pointer{Pointer: new(pb.Pointer)}
 		if p.cache != nil {
 			pp.cache = p.cache.Copy()
 		}
-		pp.Link = p.Link
-		if p.KVs != nil {
-			pp.KVs = make([]*KV, len(p.KVs))
-			for j, kv := range p.KVs {
-				pp.KVs[j] = &KV{Key: kv.Key, Value: kv.Value}
+		pp.SetLink(p.Link())
+		if p.Kvs != nil {
+			pp.Kvs = make([]*pb.KV, len(p.Kvs))
+			for j, kv := range p.Kvs {
+				pp.Kvs[j] = &pb.KV{Key: kv.Key, Value: kv.Value}
 			}
 		}
 		nn.Pointers[i] = pp
@@ -380,5 +441,5 @@ func (n *Node) Copy() *Node {
 }
 
 func (p *Pointer) isShard() bool {
-	return p.Link.Defined()
+	return p.Link().Defined()
 }

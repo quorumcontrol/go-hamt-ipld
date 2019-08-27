@@ -1,0 +1,51 @@
+syntax = "proto3";
+package hamt;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+option go_package = "github.com/quorumcontrol/go-hamt-ipld/pb";
+option (gogoproto.stable_marshaler_all) = true; // enables deterministic marshaling
+
+message KV {
+    string key = 1;
+    bytes value = 2;
+}
+
+message Pointer {
+    bytes link_bits = 1;
+    repeated KV kvs = 2;
+}
+
+message Node {
+    bytes bitfield = 1;
+    repeated Pointer pointers = 2;
+}
+
+
+// type Node struct {
+// 	Bitfield *big.Int   `refmt:"bf"`
+// 	Pointers []*Pointer `refmt:"p"`
+
+// 	// for fetching and storing children
+// 	store *CborIpldStore
+// }
+
+// func NewNode(cs *CborIpldStore) *Node {
+// 	return &Node{
+// 		Bitfield: big.NewInt(0),
+// 		Pointers: make([]*Pointer, 0),
+// 		store:    cs,
+// 	}
+// }
+
+// type KV struct {
+// 	Key   string `refmt:"k,omitempty"`
+// 	Value []byte `refmt:"v,omitempty"`
+// }
+
+// type Pointer struct {
+// 	KVs  []*KV   `refmt:"v,omitempty"`
+// 	Link cid.Cid `refmt:"l,omitempty"`
+
+// 	// cached node to avoid too many serialization operations
+// 	cache *Node
+// }
