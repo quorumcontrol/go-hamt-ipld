@@ -33,7 +33,7 @@ func FindNew(ctx context.Context, cs *hamt.CborIpldStore, existingHamt *hamt.Nod
 func getDiffFromNodes(ctx context.Context, cs *hamt.CborIpldStore, existingHamt *hamt.Node, newHamt *hamt.Node) ([]*pb.KV, error) {
 	newPairs := make([]*pb.KV, 0)
 	for i, pointer := range newHamt.Pointers {
-		if len(existingHamt.Pointers) <= i {
+		if len(existingHamt.Pointers) > 0 && len(existingHamt.Pointers) <= i {
 			existingPointer := existingHamt.Pointers[i]
 			if !pointer.Link().Defined() && pointer.Link().Equals(existingPointer.Link()) {
 				continue // the links are the same, just continue
