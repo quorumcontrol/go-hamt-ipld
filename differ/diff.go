@@ -43,14 +43,21 @@ func getDiffFromNodes(ctx context.Context, cs *hamt.CborIpldStore, existingHamt 
 		//otherwise there might be something different on this path
 		// for now do the dumb thing and get all the KVs and if they aren't in the existing,
 		// return them as new
-		n, err := hamt.LoadNode(ctx, cs, pointer.Link())
-		if err != nil {
-			return nil, xerrors.Errorf("error loading node: %w", err)
+
+		var vals []*pb.KV
+		if pointer.Link().Defined() {
+			n, err := hamt.LoadNode(ctx, cs, pointer.Link())
+			if err != nil {
+				return nil, xerrors.Errorf("error loading node: %w", err)
+			}
+			vals, err = n.AllPairs(ctx)
+			if err != nil {
+				return nil, xerrors.Errorf("error getting pairs: %w", err)
+			}
+		} else {
+			vals = pointer.Kvs
 		}
-		vals, err := n.AllPairs(ctx)
-		if err != nil {
-			return nil, xerrors.Errorf("error getting pairs: %w", err)
-		}
+
 		for _, kv := range vals {
 			existing, err := existingHamt.GetKV(ctx, kv.Key)
 			if err != nil && err != hamt.ErrNotFound {
