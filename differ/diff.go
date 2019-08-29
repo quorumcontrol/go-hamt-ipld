@@ -11,7 +11,6 @@ import (
 
 // FindNew takes an existing HAMT and returns the new Key/Value pairs found in the newHamt
 func FindNew(ctx context.Context, cs *hamt.CborIpldStore, existingHamt *hamt.Node, newHamt *hamt.Node) ([]*pb.KV, error) {
-	respChan := make(chan *pb.KV)
 	firstWrapped, err := goipldpb.WrapObject(existingHamt)
 	if err != nil {
 		return nil, xerrors.Errorf("error wrapping: %w", err)
@@ -23,7 +22,6 @@ func FindNew(ctx context.Context, cs *hamt.CborIpldStore, existingHamt *hamt.Nod
 	// if the first nodes are equal, then the whole thing is equal
 	// so just interrupt
 	if firstWrapped.Cid().Equals(newWrapped.Cid()) {
-		close(respChan)
 		return nil, nil
 	}
 
