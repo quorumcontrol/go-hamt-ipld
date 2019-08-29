@@ -1,6 +1,7 @@
 package pb
 
 import (
+	bytes "bytes"
 	fmt "fmt"
 
 	"github.com/ipfs/go-cid"
@@ -20,4 +21,13 @@ func (p *Pointer) Link() cid.Cid {
 
 func (p *Pointer) SetLink(c cid.Cid) {
 	p.LinkBits = c.Bytes()
+}
+
+// Equals returns whether or not one KV is equal to another
+func (kv *KV) Equals(other *KV) bool {
+	if kv.Key == other.Key && bytes.Equal(kv.Value, other.Value) {
+		return true
+	}
+
+	return false
 }

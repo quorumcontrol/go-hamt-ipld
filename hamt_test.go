@@ -56,6 +56,44 @@ func TestCanonicalStructure(t *testing.T) {
 	addAndRemoveKeys(t, []string{"K0", "K1", "KAA1", "KAA2", "KAA3"}, []string{"KAA4"})
 }
 
+func TestGetKV(t *testing.T) {
+	ctx := context.Background()
+	cs := NewCborStore()
+	hamt := NewNode(cs)
+	err := hamt.Set(ctx, "test", true)
+	if err != nil {
+		t.Error(err)
+	}
+	kv, err := hamt.GetKV(ctx, "test")
+	if err != nil {
+		t.Error(err)
+	}
+	if kv.Key != "test" {
+		t.Fatalf("expected test to exist")
+	}
+}
+
+func TestAllPairs(t *testing.T) {
+	ctx := context.Background()
+	cs := NewCborStore()
+	hamt := NewNode(cs)
+	err := hamt.Set(ctx, "test", true)
+	if err != nil {
+		t.Error(err)
+	}
+	err = hamt.Set(ctx, "test2", true)
+	if err != nil {
+		t.Error(err)
+	}
+	pairs, err := hamt.AllPairs(ctx)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(pairs) != 2 {
+		t.Fatalf("error getting all pairs")
+	}
+}
+
 func TestOverflow(t *testing.T) {
 	hash = identityHash
 	defer func() {

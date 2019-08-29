@@ -122,6 +122,18 @@ func (n *Node) Find(ctx context.Context, k string) (interface{}, error) {
 	return out, nil
 }
 
+func (n *Node) GetKV(ctx context.Context, k string) (*pb.KV, error) {
+	var out *pb.KV
+	err := n.getValue(ctx, hash(k), 0, k, func(kv *pb.KV) error {
+		out = kv
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (n *Node) Delete(ctx context.Context, k string) error {
 	return n.modifyValue(ctx, hash(k), 0, k, nil)
 }
@@ -211,6 +223,26 @@ func (n *Node) checkSize(ctx context.Context) (uint64, error) {
 	}
 
 	return totsize, nil
+}
+
+func (n *Node) AllPairs(ctx context.Context) ([]*pb.KV, error) {
+	vals := make([]*pb.KV, 0)
+	for _, ch := range n.Pointers {
+		if ch.isShard() {
+			chnd, err := ch.loadChild(ctx, n.store)
+			if err != nil {
+				return nil, err
+			}
+			newVals, err := chnd.AllPairs(ctx)
+			if err != nil {
+				return nil, err
+			}
+			vals = append(vals, newVals...)
+		} else {
+			vals = append(vals, ch.Kvs...)
+		}
+	}
+	return vals, nil
 }
 
 func (n *Node) Flush(ctx context.Context) error {
