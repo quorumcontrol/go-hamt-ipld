@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"sync"
 
 	cbor "github.com/ipfs/go-ipld-cbor"
 	"github.com/quorumcontrol/go-hamt-ipld/pb"
@@ -246,35 +245,22 @@ func (n *Node) AllPairs(ctx context.Context) ([]*pb.KV, error) {
 }
 
 func (n *Node) Flush(ctx context.Context) error {
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(n.Pointers))
-	defer close(errChan)
 	for _, p := range n.Pointers {
 		if p.cache != nil {
-			wg.Add(1)
-			go func(p *Pointer) {
-				defer wg.Done()
-				if err := p.cache.Flush(ctx); err != nil {
-					errChan <- err
-					return
-				}
+			if err := p.cache.Flush(ctx); err != nil {
+				return err
+			}
 
-				c, err := n.store.Put(ctx, p.cache)
-				if err != nil {
-					errChan <- err
-					return
-				}
+			c, err := n.store.Put(ctx, p.cache)
+			if err != nil {
+				return err
+			}
 
-				p.cache = nil
-				// if p is a shard no need to keep the Kvs around
-				p.Kvs = nil
-				p.SetLink(c)
-			}(p)
+			p.cache = nil
+			// if p is a shard no need to keep the Kvs around
+			p.Kvs = nil
+			p.SetLink(c)
 		}
-	}
-	wg.Wait()
-	if len(errChan) > 0 {
-		return <-errChan
 	}
 
 	return nil
