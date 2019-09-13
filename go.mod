@@ -13,7 +13,6 @@ require (
 	github.com/ipfs/go-ipld-cbor v0.0.3
 	github.com/ipfs/go-ipld-format v0.0.2
 	github.com/ipfs/go-merkledag v0.1.0
-	github.com/multiformats/go-multihash v0.0.5
 	github.com/polydawn/refmt v0.0.0-20190807091052-3d65705ee9f1
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.3.0
