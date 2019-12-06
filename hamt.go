@@ -264,11 +264,11 @@ func (n *Node) Flush(ctx context.Context) error {
 					errChan <- err
 					return
 				}
+				p.SetLink(c)
 
 				p.cache = nil
 				// if p is a shard no need to keep the Kvs around
 				p.Kvs = nil
-				p.SetLink(c)
 			}(p)
 		}
 	}
